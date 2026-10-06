@@ -131,6 +131,7 @@ def analyze_label(text, product_name):
         "category": category,
         "notes": notes,
     }
+    ''''
     Member 2: Computer Vision & OCR Processing Module
     File Name: ocr_processing.py
 
@@ -144,7 +145,7 @@ Python
 
 MEMBER 2 MOPULE: Computer Vision & OCR Processing
 File: ocr_processing.py
-
+''''
 import platform
 
 try:
