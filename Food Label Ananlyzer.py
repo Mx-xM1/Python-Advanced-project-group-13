@@ -165,7 +165,209 @@ cvz.imread(str(image_path)) if image is None:
 
 raise ValueError ("The selected image could not be opened.")
 
-# Convert to grayscale and apply Otsu thresholding for higher text readability
+# 
+
+import sys
+import tkinter as tk
+from tkinter import filedialog, messagebox, scrolledtext
+
+# Import modules written by Member 1 and Member 2
+from database_and_analysis import (
+    init_database,
+    save_analysis,
+    get_history,
+    analyze_label,
+)
+from ocr_processing import extract_text_from_image
+
+class FoodLabelAnalyzerApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Food Label Analyzer")
+        self.root.geometry("1000x750")
+        self.root.minsize(850, 650)
+        self.build_interface()
+
+    def build_interface(self):
+        title = tk.Label(
+            self.root,
+            text="FOOD LABEL ANALYZER",
+            font=("Arial", 24, "bold")
+        )
+        title.pack(pady=(20, 5))
+
+        subtitle = tk.Label(
+            self.root,
+            text="Analyze food-label information using OCR, nutrition extraction and AI analysis",
+            font=("Arial", 11)
+        )
+        subtitle.pack(pady=(0, 15))
+
+        top_frame = tk.Frame(self.root)
+        top_frame.pack(fill="x", padx=25)
+
+        tk.Label(top_frame, text="Product name:").pack(side="left")
+        self.product_name = tk.Entry(top_frame, width=40)
+        self.product_name.insert(0, "Sample Product")
+        self.product_name.pack(side="left", padx=10)
+
+        tk.Button(
+            top_frame,
+            text="Upload Label Image",
+            command=self.upload_image
+        ).pack(side="left", padx=5)
+
+        tk.Button(
+            top_frame,
+            text="Clear",
+            command=self.clear_all
+        ).pack(side="left", padx=5)
+
+        tk.Label(
+            self.root,
+            text="Label Information",
+            font=("Arial", 13, "bold")
+        ).pack(anchor="w", padx=25, pady=(15, 5))
+
+        self.input_box = scrolledtext.ScrolledText(
+            self.root,
+            height=12,
+            wrap=tk.WORD,
+            font=("Consolas", 10)
+        )
+        self.input_box.pack(fill="both", expand=True, padx=25)
+
+        button_frame = tk.Frame(self.root)
+        button_frame.pack(pady=12)
+
+        tk.Button(
+            button_frame,
+            text="ANALYZE LABEL",
+            font=("Arial", 12, "bold"),
+            command=self.analyze
+        ).pack(side="left", padx=5)
+
+        tk.Button(
+            button_frame,
+            text="VIEW HISTORY",
+            font=("Arial", 12),
+            command=self.show_history
+        ).pack(side="left", padx=5)
+
+        tk.Label(
+            self.root,
+            text="Analysis Result",
+            font=("Arial", 13, "bold")
+        ).pack(anchor="w", padx=25, pady=(5, 5))
+
+        self.result_box = scrolledtext.ScrolledText(
+            self.root,
+            height=14,
+            wrap=tk.WORD,
+            font=("Consolas", 10)
+        )
+        self.result_box.pack(fill="both", expand=True, padx=25, pady=(0, 20))
+
+    def upload_image(self):
+        path = filedialog.askopenfilename(
+            title="Select Food Label Image",
+            filetypes=[
+                ("Image files", "*.png *.jpg *.jpeg *.bmp"),
+                ("All files", "*.*"),
+            ],
+        )
+        if not path:
+            return
+
+        try:
+            text = extract_text_from_image(path)
+            self.input_box.delete("1.0", tk.END)
+            self.input_box.insert(tk.END, text)
+            messagebox.showinfo("OCR Complete", "Text successfully extracted from image.")
+        except Exception as error:
+            messagebox.showerror("OCR Error", str(error))
+
+    def analyze(self):
+        try:
+            text = self.input_box.get("1.0", tk.END)
+            name = self.product_name.get()
+            result = analyze_label(text, name)
+            save_analysis(result)
+            self.display_result(result)
+        except Exception as error:
+            messagebox.showerror("Analysis Error", str(error))
+
+    def display_result(self, result):
+        nutrition = result["nutrition"]
+        lines = [
+            "=" * 60,
+            f"PRODUCT: {result['product_name']}",
+            "=" * 60,
+            "",
+            "AI ANALYSIS",
+            f"Classification: {result['category']}",
+            "",
+            "NUTRITION INFORMATION",
+            "-" * 30,
+            f"Calories: {nutrition.get('calories')}",
+            f"Sugar: {nutrition.get('sugar')} g",
+            f"Fat: {nutrition.get('fat')} g",
+            f"Protein: {nutrition.get('protein')} g",
+            f"Sodium: {nutrition.get('sodium')} mg",
+            "",
+            "INGREDIENTS",
+            "-" * 30,
+            ", ".join(result["ingredients"]) or "Not detected",
+            "",
+            "ANALYSIS NOTES",
+            "-" * 30,
+        ]
+        lines.extend(f"- {note}" for note in result["notes"])
+        lines.extend([
+            "",
+            "Note: This application provides educational label analysis.",
+            "It is not a medical diagnosis or personalized dietary advice.",
+        ])
+
+        self.result_box.delete("1.0", tk.END)
+        self.result_box.insert(tk.END, "\n".join(lines))
+
+    def show_history(self):
+        history = get_history()
+        window = tk.Toplevel(self.root)
+        window.title("Analysis History")
+        window.geometry("900x500")
+
+        box = scrolledtext.ScrolledText(window, wrap=tk.WORD, font=("Consolas", 10))
+        box.pack(fill="both", expand=True, padx=15, pady=15)
+
+        if not history:
+            box.insert(tk.END, "No previous analyses found.")
+            return
+
+        for row in history:
+            product, calories, sugar, fat, protein, sodium, category, date = row
+            box.insert(
+                tk.END,
+                f"Product: {product}\n"
+                f"Calories: {calories} | Sugar: {sugar} g | Fat: {fat} g\n"
+                f"Protein: {protein} g | Sodium: {sodium} mg\n"
+                f"Classification: {category}\n"
+                f"Date: {date}\n"
+                + "-" * 70 + "\n"
+            )
+
+    def clear_all(self):
+        self.product_name.delete(0, tk.END)
+        self.product_name.insert(0, "Sample Product")
+        self.input_box.delete("1.0", tk.END)
+        self.result_box.delete("1.0", tk.END)
+
+if __name__ == "__main__":
+    init_database()
+    root = tk.Tk()
+    app = FoodLabelAnalyzerApp(root)
+    root.mainloop() to grayscale and apply Otsu thresholding for higher text readability
 
 gray = cvz.cvtColor (image, cvz.COLOR_BGRZGRAY)
 
