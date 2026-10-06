@@ -131,3 +131,47 @@ def analyze_label(text, product_name):
         "category": category,
         "notes": notes,
     }
+    Member 2: Computer Vision & OCR Processing Module
+    File Name: ocr_processing.py
+
+Repository Name: food-label-analyzer-ocr
+
+Role: Image Processing & Computer Vision Engineer
+
+Code Scope: Handles image loading using OpenCV, grayscale conversion, Otsu threshold image preprocessing, and optical character recognition via PyTesseract.
+
+Python
+
+MEMBER 2 MOPULE: Computer Vision & OCR Processing
+File: ocr_processing.py
+
+import platform
+
+try:
+
+import cvz import pytesseract OCR_AVAILABLE = True pytesseract.pytesseract.t esseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe" except ImportError:
+
+OCR_AVAILABLE = False
+
+def extract_text_from_image(imag e_path):
+
+if not OCR_AVAILABLE: raise RuntimeError( "OCR dependencies are missing. Run: pip install opencv-python pytesseract" )
+
+image =
+
+if not text.strip():
+
+cvz.imread(str(image_path)) if image is None:
+
+raise ValueError ("The selected image could not be opened.")
+
+# Convert to grayscale and apply Otsu thresholding for higher text readability
+
+gray = cvz.cvtColor (image, cvz.COLOR_BGRZGRAY)
+
+processed = cvz.threshold (gray, 0, 255, cu2.THRESH_BINARY + CUZ.THRESH_OTSU) [I]
+text = pytesseract.image_to_strin g(processed) if not text.strip(): raise ValueError ("No readable text was found in the image.")
+
+return text
+
+# Configure default Windows installation path if applicable if platform.system () == "Windows":
