@@ -115,7 +115,6 @@ def extract_text_from_image(image_path):
 
     return text
 
-
 # ============================================================
 # NUTRITION / INGREDIENT EXTRACTION
 # ============================================================
@@ -142,8 +141,8 @@ def extract_nutrition(text):
 
 def extract_ingredients(text):
     match = re.search(
-        r"ingredients?\s*[:\-]\s*(.*?)(?="
-        r"(?:nutrition facts|calories|allergen|serving size|$))",
+        r"ingredients?\s*[:\-]\s*(.*?)"
+        r"(?=(?:nutrition facts|calories|allergen|serving size|$))",
         text,
         re.IGNORECASE | re.DOTALL,
     )
