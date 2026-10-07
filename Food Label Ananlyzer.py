@@ -1,22 +1,40 @@
-"""
-MEMBER 1 MODULE: Database & Core Analytics
-File: database_and_analysis.py
+ """
+FOOD LABEL ANALYZER
+Complete integrated project.
+
+Features:
+- Manual food-label text entry
+- Food-label image upload
+- OCR using OpenCV + Tesseract
+- Nutrition and ingredient extraction
+- Educational nutrition analysis
+- AI-style classification
+- SQLite analysis history
+- Tkinter graphical interface
 """
 
 import re
 import sqlite3
 from pathlib import Path
+import tkinter as tk
+from tkinter import filedialog, messagebox, scrolledtext
 
-BASE_DIR = Path(_file_).parent
+# Optional OCR dependencies
+try:
+    import cv2
+    import pytesseract
+    OCR_AVAILABLE = True
+except ImportError:
+    OCR_AVAILABLE = False
+
+
+BASE_DIR = Path(__file__).parent
 DB_PATH = BASE_DIR / "food_labels.db"
 
-NUTRITION_PATTERNS = {
-    "calories": r"(?:calories|energy)\s*[:\-]?\s*(\d+(?:\.\d+)?)",
-    "sugar": r"(?:total\s+sugars?|sugars?)\s*[:\-]?\s*(\d+(?:\.\d+)?)\s*g?",
-    "fat": r"(?:total\s+fat|fat)\s*[:\-]?\s*(\d+(?:\.\d+)?)\s*g?",
-    "protein": r"protein\s*[:\-]?\s*(\d+(?:\.\d+)?)\s*g?",
-    "sodium": r"sodium\s*[:\-]?\s*(\d+(?:\.\d+)?)\s*(?:mg|g)?",
-}
+
+# ============================================================
+# DATABASE
+# ============================================================
 
 def init_database():
     with sqlite3.connect(DB_PATH) as conn:
@@ -35,8 +53,10 @@ def init_database():
             )
         """)
 
+
 def save_analysis(result):
     nutrition = result["nutrition"]
+
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute("""
             INSERT INTO analyses (
@@ -51,9 +71,10 @@ def save_analysis(result):
             nutrition.get("fat"),
             nutrition.get("protein"),
             nutrition.get("sodium"),
-            ", ".join(result["ingredients"]) if result["ingredients"] else "Not detected",
+            ", ".join(result["ingredients"]),
             result["category"],
         ))
+
 
 def get_history():
     with sqlite3.connect(DB_PATH) as conn:
@@ -64,41 +85,114 @@ def get_history():
             ORDER BY id DESC
         """).fetchall()
 
+
+# ============================================================
+# OCR / IMAGE PROCESSING
+# ============================================================
+
+def extract_text_from_image(image_path):
+    if not OCR_AVAILABLE:
+        raise RuntimeError(
+            "OCR dependencies are missing. Run: pip install opencv-python pytesseract"
+        )
+
+    image = cv2.imread(str(image_path))
+
+    if image is None:
+        raise ValueError("The selected image could not be opened.")
+
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+    # Improve text readability before OCR
+    processed = cv2.threshold(
+        gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
+    )[1]
+
+    text = pytesseract.image_to_string(processed)
+
+    if not text.strip():
+        raise ValueError("No readable text was found in the image.")
+
+    return text
+
+
+# ============================================================
+# NUTRITION / INGREDIENT EXTRACTION
+# ============================================================
+
+NUTRITION_PATTERNS = {
+    "calories": r"(?:calories|energy)\s*[:\-]?\s*(\d+(?:\.\d+)?)",
+    "sugar": r"(?:total\s+sugars?|sugars?)\s*[:\-]?\s*(\d+(?:\.\d+)?)\s*g?",
+    "fat": r"(?:total\s+fat|fat)\s*[:\-]?\s*(\d+(?:\.\d+)?)\s*g?",
+    "protein": r"protein\s*[:\-]?\s*(\d+(?:\.\d+)?)\s*g?",
+    "sodium": r"sodium\s*[:\-]?\s*(\d+(?:\.\d+)?)\s*mg?",
+}
+
+
 def extract_nutrition(text):
     normalized = " ".join(text.lower().split())
     nutrition = {}
+
     for name, pattern in NUTRITION_PATTERNS.items():
         match = re.search(pattern, normalized)
         nutrition[name] = float(match.group(1)) if match else None
+
     return nutrition
+
 
 def extract_ingredients(text):
     match = re.search(
-        r"ingredients?\s*[:\-]\s*(.*?)(?=(?:nutrition facts|calories|allergen|serving size|$))",
+        r"ingredients?\s*[:\-]\s*(.*?)(?="
+        r"(?:nutrition facts|calories|allergen|serving size|$))",
         text,
         re.IGNORECASE | re.DOTALL,
     )
+
     if not match:
         return []
+
     raw = match.group(1).replace("\n", " ")
-    return [item.strip(" .") for item in re.split(r",|;", raw) if item.strip()]
+
+    return [
+        item.strip(" .")
+        for item in re.split(r",|;", raw)
+        if item.strip()
+    ]
+
+
+# ============================================================
+# AI / ANALYSIS
+# ============================================================
 
 def classify_food(nutrition):
+    """
+    Educational classification based on simple thresholds.
+
+    This is intentionally transparent so students can understand how
+    the AI-analysis component works. It is not medical advice.
+    """
+
     sugar = nutrition.get("sugar") or 0
     sodium = nutrition.get("sodium") or 0
+
     high_sugar = sugar > 15
     high_sodium = sodium > 500
 
     if high_sugar and high_sodium:
         return "Higher sugar and sodium"
+
     if high_sugar:
         return "Higher sugar"
+
     if high_sodium:
         return "Higher sodium"
+
     return "General nutrition profile"
+
 
 def generate_notes(nutrition):
     notes = []
+
     sugar = nutrition.get("sugar")
     sodium = nutrition.get("sodium")
     protein = nutrition.get("protein")
@@ -106,19 +200,28 @@ def generate_notes(nutrition):
 
     if sugar is not None and sugar > 15:
         notes.append("Sugar is relatively high per serving.")
+
     if sodium is not None and sodium > 500:
         notes.append("Sodium is relatively high per serving.")
+
     if protein is not None and protein >= 10:
         notes.append("The label reports a notable amount of protein.")
+
     if calories is not None:
         notes.append(f"Reported calories per serving: {calories}.")
+
     if not notes:
-        notes.append("No notable threshold was detected from the available values.")
+        notes.append(
+            "No notable threshold was detected from the available values."
+        )
+
     return notes
+
 
 def analyze_label(text, product_name):
     if not text.strip():
         raise ValueError("Please enter or scan food-label information.")
+
     nutrition = extract_nutrition(text)
     ingredients = extract_ingredients(text)
     category = classify_food(nutrition)
@@ -131,62 +234,21 @@ def analyze_label(text, product_name):
         "category": category,
         "notes": notes,
     }
-    ''''
-    Member 2: Computer Vision & OCR Processing Module
-    File Name: ocr_processing.py
 
-Repository Name: food-label-analyzer-ocr
 
-Role: Image Processing & Computer Vision Engineer
-
-Code Scope: Handles image loading using OpenCV, grayscale conversion, Otsu threshold image preprocessing, and optical character recognition via PyTesseract.
-
-Python
-
-MEMBER 2 MOPULE: Computer Vision & OCR Processing
-File: ocr_processing.py
-''''
-import platform
-
-try:
-
-import cvz import pytesseract OCR_AVAILABLE = True pytesseract.pytesseract.t esseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe" except ImportError:
-
-OCR_AVAILABLE = False
-
-def extract_text_from_image(imag e_path):
-
-if not OCR_AVAILABLE: raise RuntimeError( "OCR dependencies are missing. Run: pip install opencv-python pytesseract" )
-
-image =
-
-if not text.strip():
-
-cvz.imread(str(image_path)) if image is None:
-
-raise ValueError ("The selected image could not be opened.")
-
-# 
-
-import sys
-import tkinter as tk
-from tkinter import filedialog, messagebox, scrolledtext
-
-# Import modules written by Member 1 and Member 2
-from database_and_analysis import (
-    init_database,
-    save_analysis,
-    get_history,
-    analyze_label,
-)
-from ocr_processing import extract_text_from_image
+# ============================================================
+# GUI
+# ============================================================
 
 class FoodLabelAnalyzerApp:
+
     def __init__(self, root):
         self.root = root
-        self.root.title("Food Label Analyzer")
-        self.root.geometry("1000x750")
-        self.root.minsize(850, 650)
+
+        root.title("Food Label Analyzer")
+        root.geometry("1000x750")
+        root.minsize(850, 650)
+
         self.build_interface()
 
     def build_interface(self):
@@ -207,7 +269,11 @@ class FoodLabelAnalyzerApp:
         top_frame = tk.Frame(self.root)
         top_frame.pack(fill="x", padx=25)
 
-        tk.Label(top_frame, text="Product name:").pack(side="left")
+        tk.Label(
+            top_frame,
+            text="Product name:"
+        ).pack(side="left")
+
         self.product_name = tk.Entry(top_frame, width=40)
         self.product_name.insert(0, "Sample Product")
         self.product_name.pack(side="left", padx=10)
@@ -277,14 +343,21 @@ class FoodLabelAnalyzerApp:
                 ("All files", "*.*"),
             ],
         )
+
         if not path:
             return
 
         try:
             text = extract_text_from_image(path)
+
             self.input_box.delete("1.0", tk.END)
             self.input_box.insert(tk.END, text)
-            messagebox.showinfo("OCR Complete", "Text successfully extracted from image.")
+
+            messagebox.showinfo(
+                "OCR Complete",
+                "Text was successfully extracted from the image."
+            )
+
         except Exception as error:
             messagebox.showerror("OCR Error", str(error))
 
@@ -292,14 +365,18 @@ class FoodLabelAnalyzerApp:
         try:
             text = self.input_box.get("1.0", tk.END)
             name = self.product_name.get()
+
             result = analyze_label(text, name)
             save_analysis(result)
+
             self.display_result(result)
+
         except Exception as error:
             messagebox.showerror("Analysis Error", str(error))
 
     def display_result(self, result):
         nutrition = result["nutrition"]
+
         lines = [
             "=" * 60,
             f"PRODUCT: {result['product_name']}",
@@ -323,7 +400,9 @@ class FoodLabelAnalyzerApp:
             "ANALYSIS NOTES",
             "-" * 30,
         ]
+
         lines.extend(f"- {note}" for note in result["notes"])
+
         lines.extend([
             "",
             "Note: This application provides educational label analysis.",
@@ -335,11 +414,16 @@ class FoodLabelAnalyzerApp:
 
     def show_history(self):
         history = get_history()
+
         window = tk.Toplevel(self.root)
         window.title("Analysis History")
         window.geometry("900x500")
 
-        box = scrolledtext.ScrolledText(window, wrap=tk.WORD, font=("Consolas", 10))
+        box = scrolledtext.ScrolledText(
+            window,
+            wrap=tk.WORD,
+            font=("Consolas", 10)
+        )
         box.pack(fill="both", expand=True, padx=15, pady=15)
 
         if not history:
@@ -348,6 +432,7 @@ class FoodLabelAnalyzerApp:
 
         for row in history:
             product, calories, sugar, fat, protein, sodium, category, date = row
+
             box.insert(
                 tk.END,
                 f"Product: {product}\n"
@@ -361,20 +446,49 @@ class FoodLabelAnalyzerApp:
     def clear_all(self):
         self.product_name.delete(0, tk.END)
         self.product_name.insert(0, "Sample Product")
+
         self.input_box.delete("1.0", tk.END)
         self.result_box.delete("1.0", tk.END)
 
+
+# ============================================================
+# SAMPLE DATA / TESTS
+# ============================================================
+
+def run_self_test():
+    sample = """
+    Nutrition Facts
+    Calories: 250
+    Total Fat: 8 g
+    Protein: 6 g
+    Total Sugars: 18 g
+    Sodium: 650 mg
+    Ingredients: flour, sugar, cocoa, milk
+    """
+
+    result = analyze_label(sample, "Test Product")
+
+    assert result["nutrition"]["calories"] == 250
+    assert result["nutrition"]["sugar"] == 18
+    assert result["nutrition"]["sodium"] == 650
+    assert "sugar" in result["ingredients"]
+    assert result["category"] == "Higher sugar and sodium"
+
+    print("All self-tests passed.")
+
+
+# ============================================================
+# PROGRAM START
+# ============================================================
+
 if __name__ == "__main__":
+    import sys
+
     init_database()
-    root = tk.Tk()
-    app = FoodLabelAnalyzerApp(root)
-    root.mainloop() to grayscale and apply Otsu thresholding for higher text readability
 
-gray = cvz.cvtColor (image, cvz.COLOR_BGRZGRAY)
-
-processed = cvz.threshold (gray, 0, 255, cu2.THRESH_BINARY + CUZ.THRESH_OTSU) [I]
-text = pytesseract.image_to_strin g(processed) if not text.strip(): raise ValueError ("No readable text was found in the image.")
-
-return text
-
-# Configure default Windows installation path if applicable if platform.system () == "Windows":
+    if "--test" in sys.argv:
+        run_self_test()
+    else:
+        root = tk.Tk()
+        app = FoodLabelAnalyzerApp(root)
+        root.mainloop()
